@@ -1,50 +1,42 @@
-# Project Notes
+# Claude Yank Patcher – Agent Guide
 
-**Goal:** maintain per-version sandboxes of `@anthropic-ai/claude-code` with the custom kill-ring/Emacs keybindings (Ctrl+W/K/U/Y) and capture known-working patches for each release.
+**Purpose:** keep `@anthropic-ai/claude-code` sandboxes patched with Emacs kill-ring behaviour (`Ctrl+W/K/U` write to a kill ring, `Ctrl+Y` yanks) and archive the exact replacements that worked for each release.
 
-## Current Status
+## What you should always know
 
-- ✅ Kill-ring behaviour works by modifying the prompt helper inside the vendor CLI (see `tools/apply_killring_patch.js`).
-- ✅ `patch-claude` installs a requested version, applies the patch, and stores copies of the patch metadata under `patches/<version>/`.
-- ✅ `./claude <version>` launches any sandbox created by the installer; `--sandbox-config` remains a maintainer-only flag.
-- ⚠️ When Anthropic changes the prompt helper structure, the patch helper needs to be updated with new replacement strings.
+- `./patch-claude --version <semver>` installs that CLI version, applies replacements, and snapshots the metadata into `patches/<version>/`.
+- `./claude <version>` launches the matching sandbox; the `claude` script simply finds the sandbox and runs its vendor CLI.
+- Sandboxes live under `sandboxes/<version>/` and are **never** committed. The repo only tracks metadata and tooling.
 
-## Workflow for Future Agents
+## Standard workflow
 
-1. **Install & patch a version**
-   ```bash
-   ./patch-claude --version 2.0.25
-   ./claude 2.0.25
-   ```
-   This creates `sandboxes/2.0.25/`, applies the kill-ring patch, and records artefacts in `patches/2.0.25/`.
+1. Install & patch: `./patch-claude --version X.Y.Z` (omit the flag to grab the latest from npm).
+2. Verify the keybindings inside the sandbox: `./claude X.Y.Z`, then exercise `Ctrl+W/K/U/Y`.
+3. Commit the generated `patches/X.Y.Z/` folder plus any updates in `tools/apply_killring_patch.js`.
 
-2. **What to do when the patch no longer applies**
-   - The helper already tries replacement sets from the closest patched versions plus a default template. If you still see repeated "Missing pattern ..." messages, format the new CLI and inspect the prompt helper (search for `function uc1` or equivalent).
-   - Update or add the relevant replacement entries in `tools/apply_killring_patch.js` so the script can recognise the new structure, then re-run the installer.
+## If the patch stops applying
 
-3. **Testing the patched sandbox**
-   - Launch via `./claude X.Y.Z` and exercise the keybindings (Ctrl+W/K/U/Y).
-   - Consider dumping the prompt state directly (if the CLI exposes it) to confirm the kill ring persists.
+- The installer already tries the target version, the nearest recorded version, then the template fallback. Repeated `Missing pattern` messages mean the vendor prompt changed—when that happens:
+  - Ask Claude Code, Codex, or another assistant to diff the bundle and suggest new replacements.
+  - Once the replacements succeed, record them under `patches/<version>/`, rerun the installer, and commit the artefacts.
+  - A direct prompt like `run ./patch-claude latest and build an updated patch` usually kicks off the workflow.
+- Reformat the vendor CLI for inspection:
+  ```bash
+  npx uglify-js sandboxes/X.Y.Z/node_modules/@anthropic-ai/claude-code/cli.js -b -o sandboxes/X.Y.Z/cli.pretty.js
+  ```
+- Update or add the replacement entries (usually in `patches/X.Y.Z/replacements.json`; fall back to the templates under `patches/_templates/killring/` when starting fresh).
+- Re-run the installer until it reports `✅ Kill ring patch ready`.
 
-4. **Archiving the working patch**
-   - Confirm `patches/<version>/` contains the updated `replacements.json` and `metadata.json`.
-   - Commit those files together with the updated patch helper so the version is reproducible.
+## Testing checklist
 
-5. **Legacy flow**
-   - The legacy `claude-sandbox/` tree is kept only for quick experiments; the preferred path is `./patch-claude`.
+- Launch via `./claude X.Y.Z` and confirm:
+  - `Ctrl+W` deletes the previous word and `Ctrl+Y` re-inserts it.
+  - `Ctrl+K` / `Ctrl+U` capture the expected portions of the line.
+  - `Meta+D` (Option+D on macOS) still works and populates the kill ring.
+- If the CLI exposes a prompt dump, it’s worth validating the kill buffer directly, but keyboard smoke tests are the minimum.
 
-## Reference One-Liners
+## Archiving & housekeeping
 
-```bash
-# install + patch latest version
-./patch-claude
-
-# install only (no patch)
-./patch-claude --skip-patch
-
-# launch a sandbox
-./claude 2.0.25
-
-# format the vendor CLI for investigation
-npx uglify-js sandboxes/2.0.25/node_modules/@anthropic-ai/claude-code/cli.js -b -o sandboxes/2.0.25/cli.pretty.js
-```
+- Ensure `patches/<version>/metadata.json` references the replacements you just validated.
+- Keep the helper scripts (`patch-claude.js`, `apply_killring_patch.js`) aligned with any structural discoveries.
+- Leave exploratory scripts in `tools/analysis/`; they are ignored by the automated workflow but help future debugging.
