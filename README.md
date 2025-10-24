@@ -24,7 +24,7 @@ The stock CLI forgets text removed by the Emacs shortcuts. By injecting a tiny h
 
 ```bash
 # Install and patch a specific CLI version
-./patch-claude --version 2.0.26
+./patch-claude 2.0.26
 
 # Launch the patched sandbox
 ./claude 2.0.26

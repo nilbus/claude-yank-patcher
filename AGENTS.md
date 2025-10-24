@@ -1,4 +1,4 @@
-# Claude Yank Patcher – Agent Guide
+# Claude Yank Patcher -- Agent Guide
 
 **Purpose:** keep `@anthropic-ai/claude-code` sandboxes patched with Emacs kill-ring behaviour (`Ctrl+W/K/U` write to a kill ring, `Ctrl+Y` yanks) and archive the exact replacements that worked for each release.
 
@@ -16,7 +16,7 @@
 
 ## If the patch stops applying
 
-- The installer already tries the target version, the nearest recorded version, then the template fallback. Repeated `Missing pattern` messages mean the vendor prompt changed—when that happens:
+- The installer already tries the target version, the nearest recorded version, then the template fallback. Repeated `Missing pattern` messages mean the vendor prompt changed---when that happens:
   - Ask Claude Code, Codex, or another assistant to diff the bundle and suggest new replacements.
   - Once the replacements succeed, record them under `patches/<version>/`, rerun the installer, and commit the artefacts.
   - A direct prompt like `run ./patch-claude latest and build an updated patch` usually kicks off the workflow.
@@ -32,8 +32,7 @@
 - Launch via `./claude X.Y.Z` and confirm:
   - `Ctrl+W` deletes the previous word and `Ctrl+Y` re-inserts it.
   - `Ctrl+K` / `Ctrl+U` capture the expected portions of the line.
-  - `Meta+D` (Option+D on macOS) still works and populates the kill ring.
-- If the CLI exposes a prompt dump, it’s worth validating the kill buffer directly, but keyboard smoke tests are the minimum.
+- If the CLI exposes a prompt dump, it's worth validating the kill buffer directly, but keyboard smoke tests are the minimum.
 
 ## Archiving & housekeeping
 
