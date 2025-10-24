@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# Claude Code launcher for versioned sandboxes.
+# Run `./patch-claude --version X.Y.Z` to create a sandbox, then
+# launch it via `./claude --version X.Y.Z`. If no version is provided, the
+# newest sandbox under sandboxes/ is used automatically.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SANDBOX_ROOT="$SCRIPT_DIR/sandboxes"
+
+usage() {
+    cat <<'EOF'
+Usage: ./claude [version] [claude args...]
+
+  version  Optional sandbox version (created via ./patch-claude)
+  --help   Show this help message.
+
+All remaining arguments are forwarded to the Claude CLI.
+EOF
+}
+
+USE_SANDBOX_CONFIG="${CLAUDE_SANDBOX_CONFIG:-0}"
+SANDBOX_VERSION=""
+FORWARD_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --sandbox|--version|-v)
+            SANDBOX_VERSION="$2"
+            if [[ -z "$SANDBOX_VERSION" ]]; then
+                echo "❌ Missing sandbox version argument"
+                exit 1
+            fi
+            shift 2
+            ;;
+        --sandbox-config)
+            USE_SANDBOX_CONFIG=1
+            shift
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        --*)
+            FORWARD_ARGS+=("$1")
+            shift
+            ;;
+        *)
+            if [[ -z "$SANDBOX_VERSION" ]]; then
+                SANDBOX_VERSION="$1"
+            else
+                FORWARD_ARGS+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+set -- "${FORWARD_ARGS[@]}"
+
+if [[ -z "$SANDBOX_VERSION" ]]; then
+    if [[ -d "$SANDBOX_ROOT" ]]; then
+        SANDBOX_VERSION="$(ls -1 "$SANDBOX_ROOT" 2>/dev/null | sort -V | tail -n1)"
+    fi
+    if [[ -z "$SANDBOX_VERSION" ]]; then
+        echo "❌ No sandboxes found."
+        echo "Run: ./patch-claude --version <semver>"
+        exit 1
+    fi
+    echo "ℹ️  Using latest sandbox: $SANDBOX_VERSION"
+fi
+
+SANDBOX_DIR="$SANDBOX_ROOT/$SANDBOX_VERSION"
+CLI_PATH="$SANDBOX_DIR/node_modules/@anthropic-ai/claude-code/cli.js"
+
+if [[ "$USE_SANDBOX_CONFIG" == "1" ]]; then
+    export CLAUDE_CONFIG_DIR="${SCRIPT_DIR}/.claude-tmp"
+    mkdir -p "${CLAUDE_CONFIG_DIR}/debug"
+fi
+
+if [ ! -f "$CLI_PATH" ]; then
+    echo "❌ Claude Code CLI not found at: $CLI_PATH"
+    echo "Run: ./patch-claude --version $SANDBOX_VERSION"
+    exit 1
+fi
+
+if ! grep -q "killBufferRef" "$CLI_PATH"; then
+    echo "⚠️  Warning: Emacs keybindings patch not detected!"
+    echo "To apply the patch, run: ./patch-claude --version $SANDBOX_VERSION"
+    read -r -p "Continue without the patch? (y/N) " response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+echo "🚀 Starting Claude Code with Emacs keybindings..."
+echo "📋 Available keybindings:"
+echo "   Ctrl+W  - Delete word backward"
+echo "   Ctrl+K  - Delete to end of line"
+echo "   Ctrl+U  - Delete to beginning of line"
+echo "   Ctrl+Y  - Yank/paste deleted text"
+echo "🗂  Sandbox: $SANDBOX_VERSION"
+if [[ "$USE_SANDBOX_CONFIG" == "1" ]]; then
+    echo "🔐 Using sandboxed Claude configuration directory: $CLAUDE_CONFIG_DIR"
+else
+    echo "🔓 Using system Claude configuration (pass --sandbox-config to isolate it here)"
+fi
+echo ""
+
+exec node "$CLI_PATH" "$@"

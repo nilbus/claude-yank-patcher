@@ -1,0 +1,1 @@
+handleInput=(A)=>{if(A==="\x03"&&this.props.exitOnCtrlC)this.handleExit();if(A==="\x1A"&&aR9)this.handleSuspend();if(A===nR9&&this.state.activeFocusId)this.setState({activeFocusId:void 0});if(this.state.isFocusEnabled&&this.state.focusables.length>0){if(A===lR9)this.focusNext();if(A===iR9)this.focusPrevious()}}

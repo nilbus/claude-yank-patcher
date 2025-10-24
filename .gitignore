@@ -1,0 +1,8 @@
+# Local sandbox artifacts (never commit)
+Attic/
+claude-sandbox/
+claude-config/
+claude-home/
+sandboxes/
+.claude-tmp/
+.claude/
