@@ -5,7 +5,14 @@
 # launch it via `./claude --version X.Y.Z`. If no version is provided, the
 # newest sandbox under sandboxes/ is used automatically.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to find the actual script location
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 SANDBOX_ROOT="$SCRIPT_DIR/sandboxes"
 
 usage() {
