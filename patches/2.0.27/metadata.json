@@ -1,0 +1,48 @@
+{
+  "version": "2.0.27",
+  "recordedAt": "2025-10-25T04:35:29.421Z",
+  "sandbox": "sandboxes/2.0.27",
+  "replacementsSource": "2.0.27",
+  "replacements": "patches/2.0.27/replacements.json",
+  "patchState": {
+    "version": "2.0.27",
+    "replacementsSource": "2.0.27",
+    "replacements": [
+      {
+        "label": "killBufferRef insertion with offset tracking",
+        "search": "} = O7(), P = jy(",
+        "replace": "} = O7(), killBufferRef = Jy1.useRef(\"\"), lastKillEndOffsetRef = Jy1.useRef(-1), recordKill = (DA1, newOffset) => { if (!DA1 || DA1.length === 0) return; if (O.offset === lastKillEndOffsetRef.current) { if (newOffset < O.offset) { killBufferRef.current = DA1 + killBufferRef.current; } else { killBufferRef.current += DA1; } } else { killBufferRef.current = DA1; } lastKillEndOffsetRef.current = newOffset; }, P = jy("
+      },
+      {
+        "label": "recordKill in reset helper",
+        "search": "    function h() {\n        if (A.trim() !== \"\") w_(A), J?.();\n        return O5.fromText(\"\", V, 0);\n    }",
+        "replace": "    function h() {\n        if (A.trim() !== \"\") w_(A), J?.();\n        lastKillEndOffsetRef.current = -1;\n        return O5.fromText(\"\", V, 0);\n    }"
+      },
+      {
+        "label": "Ctrl+K kill ring with append",
+        "search": "[ \"k\", () => O.deleteToLineEnd() ]",
+        "replace": "[ \"k\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteToLineEnd();\n        recordKill(K1.slice(j1), W1.offset);\n        return W1;\n    } ]"
+      },
+      {
+        "label": "Ctrl+T transpose",
+        "search": "[ \"p\", () => d() ], [ \"u\",",
+        "replace": "[ \"p\", () => d() ], [ \"t\", () => {\n        let text = O.text, offset = O.offset;\n        if (offset === 0 || text.length < 2) return O;\n        if (offset >= text.length) {\n            if (text.length < 2) return O;\n            let before = text.slice(0, offset - 2);\n            let char1 = text[offset - 2];\n            let char2 = text[offset - 1];\n            let after = text.slice(offset);\n            return O5.fromText(before + char2 + char1 + after, V, offset);\n        }\n        let before = text.slice(0, offset - 1);\n        let char1 = text[offset - 1];\n        let char2 = text[offset];\n        let after = text.slice(offset + 1);\n        return O5.fromText(before + char2 + char1 + after, V, offset + 1);\n    } ], [ \"u\","
+      },
+      {
+        "label": "Ctrl+U kill ring with append",
+        "search": "[ \"u\", () => O.deleteToLineStart() ]",
+        "replace": "[ \"u\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteToLineStart();\n        recordKill(K1.slice(W1.offset, j1), W1.offset);\n        return W1;\n    } ]"
+      },
+      {
+        "label": "Ctrl+W kill ring + yank with append",
+        "search": "[ \"w\", () => O.deleteWordBefore() ] ]),",
+        "replace": "[ \"w\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.prevWORD().modifyText(O);\n        recordKill(K1.slice(W1.offset, j1), W1.offset);\n        return W1;\n    } ], [ \"y\", () => killBufferRef.current ? O.insert(killBufferRef.current) : O ] ]),"
+      },
+      {
+        "label": "Meta+D kill ring with append",
+        "search": "[ \"d\", () => O.deleteWordAfter() ] ]);",
+        "replace": "[ \"d\", () => {\n        let K1 = O.text, j1 = O.offset, endPos = O.endOfWord().right(), W1 = O.modifyText(endPos), z1 = endPos.offset - j1;\n        if (z1 > 0) recordKill(K1.slice(j1, j1 + z1), W1.offset);\n        return W1;\n    } ] ]);"
+      }
+    ]
+  }
+}
