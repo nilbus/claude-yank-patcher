@@ -1,0 +1,552 @@
+#!/usr/bin/env node
+
+/**
+ * Update and manage Claude Yank Patcher wrapper installations.
+ *
+ * This utility helps manage symlinks/wrappers for easy access to Claude Code
+ * with Emacs keybindings from anywhere in the system.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+function info(msg) {
+    console.log(`ℹ️  ${msg}`);
+}
+
+function step(icon, msg) {
+    console.log(`${icon} ${msg}`);
+}
+
+function success(msg) {
+    console.log(`✅ ${msg}`);
+}
+
+function warn(msg) {
+    console.log(`⚠️  ${msg}`);
+}
+
+function error(msg) {
+    console.log(`❌ ${msg}`);
+}
+
+function printHelp() {
+    console.log(`Usage: ./install-wrapper [options] [name]
+
+Manage Claude Yank Patcher wrapper installations for easy system-wide access.
+
+Default behavior: Install or update wrapper (auto-detects existing installation)
+
+Options:
+  [name]              Install wrapper with custom name (default: claude)
+  --version <ver>     Pin wrapper to specific version (default: latest)
+  --uninstall [name]  Remove wrapper from PATH (requires confirmation)
+  --list              List current wrapper installations
+  --check             Check wrapper status and PATH locations
+  --target-dir <dir>  Specify target directory instead of auto-detecting
+  --name <name>       Specify wrapper name (default: claude)
+  --dry-run           Show what would be done without executing
+  --yes               Skip confirmation prompts (use with caution)
+  --help              Show this help message
+
+Environment Variables:
+  CLAUDE_YANK_DIR     Override installation directory (auto-detected by default)
+  CLAUDE_YANK_YES=1   Skip confirmation prompts (equivalent to --yes)
+
+Examples:
+  ./install-wrapper                     # Install/update as 'claude'
+  ./install-wrapper claude-enhanced     # Install with custom name
+  ./install-wrapper --target-dir ~/bin  # Install to specific directory
+  ./install-wrapper --list              # Show current installations
+  ./install-wrapper --uninstall claude  # Remove installation`);
+}
+
+// PATH directories in order of preference (most user-specific first)
+const PATH_PREFERENCES = [
+    path.join(process.env.HOME || '', '.local', 'bin'),
+    path.join(process.env.HOME || '', 'bin'),
+    '/usr/local/bin',
+    '/opt/homebrew/bin', // Apple Silicon Macs
+    '/usr/bin',
+    '/bin'
+];
+
+function getPathDirectories() {
+    const pathEnv = process.env.PATH || '';
+    return pathEnv.split(':').filter(dir => dir && dir.length > 0);
+}
+
+function findWritablePathDirectories() {
+    const pathDirs = getPathDirectories();
+    const writableDirs = [];
+
+    for (const dir of pathDirs) {
+        try {
+            // Check if directory exists
+            if (!fs.existsSync(dir)) {
+                continue;
+            }
+
+            // Check if directory is writable
+            fs.accessSync(dir, fs.constants.W_OK);
+            writableDirs.push(dir);
+        } catch (err) {
+            // Directory doesn't exist or isn't writable
+            continue;
+        }
+    }
+
+    // Sort by preference (user-specific directories first)
+    return writableDirs.sort((a, b) => {
+        const aPref = PATH_PREFERENCES.indexOf(a);
+        const bPref = PATH_PREFERENCES.indexOf(b);
+        if (aPref === -1 && bPref === -1) return 0;
+        if (aPref === -1) return 1;
+        if (bPref === -1) return -1;
+        return aPref - bPref;
+    });
+}
+
+function findInstallationDir() {
+    // Check environment variable first
+    const envDir = process.env.CLAUDE_YANK_DIR;
+    if (envDir && fs.existsSync(envDir) && fs.existsSync(path.join(envDir, 'claude'))) {
+        return envDir;
+    }
+
+    // Find current script location and walk up
+    let currentDir = __dirname;
+    while (currentDir !== path.dirname(currentDir)) {
+        const claudePath = path.join(currentDir, 'claude');
+        const toolsPath = path.join(currentDir, 'tools');
+        const sandboxesPath = path.join(currentDir, 'sandboxes');
+
+        if (fs.existsSync(claudePath) && fs.existsSync(toolsPath) && fs.existsSync(sandboxesPath)) {
+            return currentDir;
+        }
+        currentDir = path.dirname(currentDir);
+    }
+
+    return null;
+}
+
+function findAllWrapperInstallations() {
+    const installations = [];
+    const pathDirs = getPathDirectories();
+
+    for (const dir of pathDirs) {
+        try {
+            // List all files in the directory and check each one
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+                const wrapperPath = path.join(dir, file);
+                if (fs.existsSync(wrapperPath)) {
+                    const stats = fs.lstatSync(wrapperPath);
+                    let target = null;
+                    let isBroken = false;
+                    let isOurWrapper = false;
+
+                    if (stats.isSymbolicLink()) {
+                        try {
+                            target = fs.readlinkSync(wrapperPath);
+                            // Check if it's a symlink to our claude-wrapper
+                            isOurWrapper = target.includes('claude-yank-patcher') && target.includes('claude-wrapper');
+                            // Check if target exists
+                            if (!fs.existsSync(target)) {
+                                isBroken = true;
+                            }
+                        } catch (err) {
+                            isBroken = true;
+                        }
+                    }
+
+                    // Only add if it's our wrapper symlink
+                    if (stats.isSymbolicLink() && isOurWrapper) {
+                        installations.push({
+                            path: wrapperPath,
+                            directory: dir,
+                            name: file, // Use the actual filename
+                            isSymlink: stats.isSymbolicLink(),
+                            target,
+                            isBroken,
+                            writable: fs.accessSync(dir, fs.constants.W_OK) === undefined
+                        });
+                    }
+                }
+            }
+        } catch (err) {
+            // Can't access directory, skip it
+        }
+    }
+
+    // Deduplicate installations by path
+    const uniqueInstallations = installations.filter((inst, index, self) =>
+        index === self.findIndex(other => other.path === inst.path)
+    );
+
+    return uniqueInstallations;
+}
+
+function findWrapperInstallations() {
+    const installations = [];
+    const pathDirs = getPathDirectories();
+    const wrapperName = process.argv.includes('--name') ?
+        process.argv[process.argv.indexOf('--name') + 1] : 'claude';
+
+    for (const dir of pathDirs) {
+        try {
+            const wrapperPath = path.join(dir, wrapperName);
+            if (fs.existsSync(wrapperPath)) {
+                const stats = fs.lstatSync(wrapperPath);
+                let target = null;
+                let isBroken = false;
+                let isOurWrapper = false;
+
+                if (stats.isSymbolicLink()) {
+                    try {
+                        target = fs.readlinkSync(wrapperPath);
+                        // Check if it's a symlink to our claude-wrapper
+                        isOurWrapper = target.includes('claude-yank-patcher') && target.includes('claude-wrapper');
+                        // Check if target exists
+                        if (!fs.existsSync(target)) {
+                            isBroken = true;
+                        }
+                    } catch (err) {
+                        isBroken = true;
+                    }
+                }
+
+                // Only add if it's our wrapper symlink
+                if (stats.isSymbolicLink() && isOurWrapper) {
+                    installations.push({
+                        path: wrapperPath,
+                        directory: dir,
+                        name: wrapperName,
+                        isSymlink: stats.isSymbolicLink(),
+                        target,
+                        isBroken,
+                        writable: fs.accessSync(dir, fs.constants.W_OK) === undefined
+                    });
+                }
+            }
+        } catch (err) {
+            // Can't access directory, skip it
+        }
+    }
+
+    return installations;
+}
+
+function installWrapper(options = {}) {
+    const { targetDir, name = 'claude', version, dryRun = false } = options;
+
+    step('🔍', 'Finding Claude Yank Patcher installation...');
+    const installDir = findInstallationDir();
+    if (!installDir) {
+        error('Cannot find Claude Yank Patcher installation directory.');
+        info('Please run this script from within the claude-yank-patcher repository.');
+        process.exit(1);
+    }
+    success(`Found installation at: ${installDir}`);
+
+    step('🔍', 'Locating optimal PATH directory...');
+    let targetDirectory;
+
+    if (targetDir) {
+        targetDirectory = targetDir;
+        if (!fs.existsSync(targetDirectory)) {
+            if (dryRun) {
+                info(`Would create directory: ${targetDirectory}`);
+            } else {
+                fs.mkdirSync(targetDirectory, { recursive: true });
+                info(`Created directory: ${targetDirectory}`);
+            }
+        }
+    } else {
+        const writableDirs = findWritablePathDirectories();
+        if (writableDirs.length === 0) {
+            error('No writable PATH directories found.');
+            info('Try creating ~/bin or ~/.local/bin and adding it to your PATH, or use --target-dir.');
+            process.exit(1);
+        }
+        targetDirectory = writableDirs[0];
+    }
+
+    success(`Using target directory: ${targetDirectory}`);
+
+    const wrapperSource = path.join(installDir, 'tools', 'claude-wrapper');
+    const wrapperTarget = path.join(targetDirectory, name);
+
+    const isUpdate = fs.existsSync(wrapperTarget) || (fs.lstatSync(wrapperTarget, { throwIfNoEntry: false })?.isSymbolicLink() ?? false);
+
+  if (isUpdate) {
+        if (!dryRun) {
+            step('🔄', `Updating existing wrapper at: ${wrapperTarget}`);
+            fs.unlinkSync(wrapperTarget);
+        } else {
+            step('🔄', `Would update existing wrapper at: ${wrapperTarget}`);
+        }
+    } else {
+        step('📋', 'Installing new wrapper...');
+    }
+
+    if (dryRun) {
+        info(`Would create symlink: ${wrapperTarget} -> ${wrapperSource}`);
+        if (version) {
+            info(`Would create version file: ${targetDirectory}/.claude-wrapper-version with version ${version}`);
+        }
+    } else {
+        fs.symlinkSync(wrapperSource, wrapperTarget);
+        fs.chmodSync(wrapperTarget, '755');
+        success(`Created symlink: ${wrapperTarget} -> ${wrapperSource}`);
+
+        // Create version file if specific version requested
+        if (version) {
+            const versionFile = path.join(targetDirectory, '.claude-wrapper-version');
+            fs.writeFileSync(versionFile, version);
+            success(`Pinned wrapper to version: ${version}`);
+        } else {
+            // Remove version file if using latest
+            const versionFile = path.join(targetDirectory, '.claude-wrapper-version');
+            if (fs.existsSync(versionFile)) {
+                fs.unlinkSync(versionFile);
+                info('Removed version pin - using latest sandbox');
+            }
+        }
+    }
+
+    const action = isUpdate ? 'Update' : 'Installation';
+    step('🎉', `${action} complete!`);
+    info(`You can now run: ${name} --help`);
+    if (version) {
+        info(`Wrapper pinned to version: ${version}`);
+    } else {
+        info(`Wrapper uses the latest installed sandbox automatically.`);
+    }
+}
+
+async function uninstallWrapper(options = {}) {
+    const { name = 'claude', dryRun = false } = options;
+
+    step('🔍', 'Finding wrapper installations...');
+    const installations = findAllWrapperInstallations().filter(inst => inst.name === name);
+
+    if (installations.length === 0) {
+        warn(`No installations found for wrapper: ${name}`);
+        return;
+    }
+
+    if (!dryRun) {
+        console.log(`\nFound ${installations.length} installation(s) to remove:`);
+        installations.forEach(inst => {
+            console.log(`  ${inst.path} -> ${inst.target}`);
+        });
+
+        // Check for confirmation flag or environment variable
+        const skipConfirmation = process.argv.includes('--yes') || process.env.CLAUDE_YANK_YES === '1';
+
+        if (!skipConfirmation) {
+            const readline = require('readline');
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+
+            const question = (prompt) => new Promise(resolve => rl.question(prompt, resolve));
+
+            try {
+                const response = await question('\n❓ Are you sure you want to remove these installation(s)? [y/N] ');
+                rl.close();
+
+                if (!response || !response.toLowerCase().startsWith('y')) {
+                    info('Uninstall cancelled.');
+                    return;
+                }
+            } catch (err) {
+                rl.close();
+                error('Failed to read input. Use --yes to skip confirmation.');
+                return;
+            }
+        }
+    }
+
+    for (const installation of installations) {
+        if (dryRun) {
+            info(`Would remove: ${installation.path}`);
+            const versionFile = path.join(installation.directory, '.claude-wrapper-version');
+            if (fs.existsSync(versionFile)) {
+                info(`Would remove version file: ${versionFile}`);
+            }
+        } else {
+            try {
+                fs.unlinkSync(installation.path);
+                success(`Removed: ${installation.path}`);
+
+                // Also remove version file if it exists
+                const versionFile = path.join(installation.directory, '.claude-wrapper-version');
+                if (fs.existsSync(versionFile)) {
+                    fs.unlinkSync(versionFile);
+                    success(`Removed version file: ${versionFile}`);
+                }
+            } catch (err) {
+                error(`Failed to remove ${installation.path}: ${err.message}`);
+            }
+        }
+    }
+}
+
+function listInstallations() {
+    step('📋', 'Scanning PATH for wrapper installations...');
+
+    const installations = findAllWrapperInstallations();
+    if (installations.length === 0) {
+        info('No wrapper installations found in PATH.');
+        return;
+    }
+
+    console.log('\nCurrent installations:');
+    installations.forEach(inst => {
+        const status = inst.isBroken ? '❌ BROKEN' : '✅ OK';
+        const type = inst.isSymlink ? 'symlink' : 'file';
+        const target = inst.target ? ` -> ${inst.target}` : '';
+        const writable = inst.writable ? ' (writable)' : ' (read-only)';
+
+        console.log(`  ${status} ${inst.path}${target} [${type}]${writable}`);
+    });
+}
+
+function checkStatus() {
+    step('🔍', 'Checking installation status...');
+
+    const installDir = findInstallationDir();
+    if (!installDir) {
+        error('Cannot find Claude Yank Patcher installation.');
+        return;
+    }
+    success(`Installation directory: ${installDir}`);
+
+    step('🔍', 'Checking PATH access...');
+    const writableDirs = findWritablePathDirectories();
+    if (writableDirs.length > 0) {
+        success(`Writable PATH directories found: ${writableDirs.join(', ')}`);
+    } else {
+        warn('No writable PATH directories found.');
+        info('Consider creating ~/bin or ~/.local/bin and adding to PATH.');
+    }
+
+    step('🔍', 'Checking sandboxes...');
+    const sandboxesDir = path.join(installDir, 'sandboxes');
+    if (fs.existsSync(sandboxesDir)) {
+        try {
+            const versions = fs.readdirSync(sandboxesDir);
+            if (versions.length > 0) {
+                success(`Available sandboxes: ${versions.join(', ')}`);
+            } else {
+                warn('No sandboxes found. Run ./patch-claude to create one.');
+            }
+        } catch (err) {
+            warn(`Cannot read sandboxes directory: ${err.message}`);
+        }
+    } else {
+        warn('Sandboxes directory not found.');
+    }
+
+    listInstallations();
+}
+
+function parseArgs(argv) {
+    const args = argv.slice(2);
+    const options = {
+        action: 'install', // Default action is install/update
+        targetDir: null,
+        name: 'claude',
+        version: null, // null means latest
+        dryRun: false
+    };
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        switch (arg) {
+            case '--install':
+                options.action = 'install';
+                break;
+            case '--uninstall':
+                options.action = 'uninstall';
+                if (i + 1 < args.length && !args[i + 1].startsWith('--')) {
+                    options.name = args[++i];
+                }
+                break;
+            case '--list':
+                options.action = 'list';
+                break;
+            case '--check':
+                options.action = 'check';
+                break;
+            case '--target-dir':
+                options.targetDir = args[++i];
+                break;
+            case '--version':
+                options.version = args[++i];
+                break;
+            case '--name':
+                options.name = args[++i];
+                break;
+            case '--dry-run':
+                options.dryRun = true;
+                break;
+            case '--yes':
+                // Skip confirmation prompts (handled in uninstallWrapper)
+                break;
+            case '--help':
+                printHelp();
+                process.exit(0);
+            default:
+                // If no action is set yet, treat positional arguments as requiring an action first
+                if (!options.action) {
+                    error(`Unknown option: ${arg}`);
+                    printHelp();
+                    process.exit(1);
+                }
+                // If we have an action and no custom name set yet, treat this as a custom name
+                if (options.action === 'install' && options.name === 'claude') {
+                    options.name = arg;
+                } else if (options.action === 'uninstall' && options.name === 'claude') {
+                    options.name = arg;
+                } else {
+                    error(`Unexpected argument: ${arg}`);
+                    printHelp();
+                    process.exit(1);
+                }
+        }
+    }
+
+    return options;
+}
+
+async function main() {
+    const options = parseArgs(process.argv);
+
+    switch (options.action) {
+        case 'install':
+            installWrapper(options);
+            break;
+        case 'uninstall':
+            await uninstallWrapper(options);
+            break;
+        case 'list':
+            listInstallations();
+            break;
+        case 'check':
+            checkStatus();
+            break;
+        default:
+            error(`Unknown action: ${options.action}`);
+            printHelp();
+            process.exit(1);
+    }
+}
+
+if (require.main === module) {
+    main();
+}

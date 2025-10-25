@@ -43,6 +43,26 @@ Each run creates `sandboxes/<version>/` with the vendor package plus:
 
 After a successful patch the script mirrors those replacements into `patches/<version>/`. Commit that folder so the version can be reproduced later.
 
+## System-wide installation
+
+Install a system-wide `claude` command that uses the patched CLI:
+
+```bash
+# Install the wrapper (replaces your system claude command)
+./install-wrapper
+
+# Pin to a specific version (useful for rollback)
+./install-wrapper --version 2.0.24
+
+# Reset to use latest version
+./install-wrapper
+
+# See all options
+./install-wrapper --help
+```
+
+The wrapper automatically uses your latest installed sandbox, or you can pin it to a specific version for stability.
+
 ## When a patch fails
 
 1. Reformat the CLI to see the new structure:

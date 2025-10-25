@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Claude Yank Patcher wrapper - forward to latest sandbox
+
+# fully cross platform and portable version to resolve symlinks - from ./claude
+resolve_symlink() {
+    local SCRIPT=$1 NEWSCRIPT=''
+    until [[ "$SCRIPT" == "$NEWSCRIPT" ]]; do
+        # if path starts with '.' or '..', make it absolute
+        if [[ "${SCRIPT:0:1}" == '.' ]]; then
+            SCRIPT="$PWD/$SCRIPT"
+        fi
+        cd "$(dirname "$SCRIPT")" || return 1
+        if [[ "${SCRIPT:0:1}" != '.' ]]; then
+            SCRIPT="$(basename "$SCRIPT")"
+        fi
+        SCRIPT="${NEWSCRIPT:=$SCRIPT}"
+        NEWSCRIPT=$(ls -ld -- "$SCRIPT" 2>/dev/null | awk '{print $NF}')
+    done
+    if [[ "${SCRIPT:0:1}" != '/' ]]; then
+        SCRIPT="$PWD/$SCRIPT"
+    fi
+    dirname "$SCRIPT"
+}
+
+SCRIPT_DIR=$(resolve_symlink "$0")
+
+# Walk up to find the repo root (has 'claude' and 'sandboxes' dirs)
+INSTALL_DIR="$SCRIPT_DIR"
+while [[ "$INSTALL_DIR" != "/" ]]; do
+    if [[ -f "$INSTALL_DIR/claude" && -d "$INSTALL_DIR/sandboxes" ]]; then
+        break
+    fi
+    INSTALL_DIR="$(dirname "$INSTALL_DIR")"
+done
+
+if [[ "$INSTALL_DIR" == "/" ]] || [[ ! -f "$INSTALL_DIR/claude" ]]; then
+    echo "❌ Cannot find Claude Yank Patcher installation" >&2
+    exit 1
+fi
+
+# Check for version override file next to wrapper symlink (not the target)
+# Get the directory where the symlink itself lives
+WRAPPER_SYMLINK_DIR="$(dirname "$0")"
+VERSION_FILE="$WRAPPER_SYMLINK_DIR/.claude-wrapper-version"
+
+REQUESTED_VERSION=""
+
+# First check for version file
+if [[ -f "$VERSION_FILE" ]]; then
+    REQUESTED_VERSION=$(cat "$VERSION_FILE" 2>/dev/null || echo "")
+fi
+
+# Find sandbox to use
+if [[ -n "$REQUESTED_VERSION" ]]; then
+    # Use specific version
+    SANDBOX_DIR="$REQUESTED_VERSION"
+    if [[ ! -d "$INSTALL_DIR/sandboxes/$SANDBOX_DIR" ]]; then
+        echo "❌ Sandbox version $REQUESTED_VERSION not found" >&2
+        echo "Available versions: $(ls -1 "$INSTALL_DIR/sandboxes" 2>/dev/null | sort -V | tr '\n' ' ')" >&2
+        exit 1
+    fi
+else
+    # Use latest sandbox (highest version number)
+    SANDBOX_DIR=$(ls -1 "$INSTALL_DIR/sandboxes" 2>/dev/null | sort -V | tail -1)
+fi
+
+if [[ -z "$SANDBOX_DIR" ]]; then
+    echo "❌ No sandboxes found. Run './patch-claude' first." >&2
+    exit 1
+fi
+
+CLI_PATH="$INSTALL_DIR/sandboxes/$SANDBOX_DIR/node_modules/@anthropic-ai/claude-code/cli.js"
+
+if [[ ! -f "$CLI_PATH" ]]; then
+    echo "❌ CLI not found at $CLI_PATH" >&2
+    exit 1
+fi
+
+# Show we're running the patched version (except for programmatic output)
+if [[ "$*" != *"-p"* && "$*" != *"--print"* ]]; then
+    echo "🚀 Claude Yank Patcher v$SANDBOX_DIR - Emacs keybindings enabled"
+fi
+
+# Forward all arguments to the CLI
+exec node "$CLI_PATH" "$@"
