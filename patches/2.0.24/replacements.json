@@ -1,32 +1,37 @@
 [
   {
-    "label": "killBufferRef insertion (My variant)",
+    "label": "killBufferRef insertion with offset tracking (My variant)",
     "search": "} = wZ(), P = My(",
-    "replace": "} = wZ(), killBufferRef = mM.default.useRef(\"\"), recordKill = K1 => { if (K1 && K1.length > 0) killBufferRef.current = K1; }, P = My("
+    "replace": "} = wZ(), killBufferRef = mM.default.useRef(\"\"), lastKillEndOffsetRef = mM.default.useRef(-1), recordKill = (K1, newOffset) => { if (!K1 || K1.length === 0) return; if (O.offset === lastKillEndOffsetRef.current) { if (newOffset < O.offset) { killBufferRef.current = K1 + killBufferRef.current; } else { killBufferRef.current += K1; } } else { killBufferRef.current = K1; } lastKillEndOffsetRef.current = newOffset; }, P = My("
   },
   {
     "label": "recordKill in reset helper",
     "search": "function h() {\n        if (A.trim() !== \"\") zk(A), W?.();\n        return w3.fromText(\"\", K, 0);\n    }",
-    "replace": "function h() {\n        if (A.trim() !== \"\") zk(A), W?.();\n        recordKill(O.text);\n        return w3.fromText(\"\", K, 0);\n    }"
+    "replace": "function h() {\n        if (A.trim() !== \"\") zk(A), W?.();\n        lastKillEndOffsetRef.current = -1;\n        return w3.fromText(\"\", K, 0);\n    }"
   },
   {
-    "label": "Ctrl+K kill ring",
+    "label": "Ctrl+K kill ring with append",
     "search": "[ \"k\", () => O.deleteToLineEnd() ]",
-    "replace": "[ \"k\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteToLineEnd();\n        recordKill(K1.slice(j1));\n        return W1;\n    } ]"
+    "replace": "[ \"k\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteToLineEnd();\n        recordKill(K1.slice(j1), W1.offset);\n        return W1;\n    } ]"
   },
   {
-    "label": "Ctrl+U kill ring",
+    "label": "Ctrl+T transpose",
+    "search": "[ \"p\", () => c() ], [ \"u\",",
+    "replace": "[ \"p\", () => c() ], [ \"t\", () => {\n        let text = O.text, offset = O.offset;\n        if (offset === 0 || text.length < 2) return O;\n        if (offset >= text.length) {\n            if (text.length < 2) return O;\n            let before = text.slice(0, offset - 2);\n            let char1 = text[offset - 2];\n            let char2 = text[offset - 1];\n            let after = text.slice(offset);\n            return w3.fromText(before + char2 + char1 + after, K, offset);\n        }\n        let before = text.slice(0, offset - 1);\n        let char1 = text[offset - 1];\n        let char2 = text[offset];\n        let after = text.slice(offset + 1);\n        return w3.fromText(before + char2 + char1 + after, K, offset + 1);\n    } ], [ \"u\","
+  },
+  {
+    "label": "Ctrl+U kill ring with append",
     "search": "[ \"u\", () => O.deleteToLineStart() ]",
-    "replace": "[ \"u\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteToLineStart();\n        recordKill(K1.slice(W1.offset, j1));\n        return W1;\n    } ]"
+    "replace": "[ \"u\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteToLineStart();\n        recordKill(K1.slice(W1.offset, j1), W1.offset);\n        return W1;\n    } ]"
   },
   {
-    "label": "Ctrl+W kill ring + yank",
+    "label": "Ctrl+W kill ring + yank with append",
     "search": "[ \"w\", () => O.deleteWordBefore() ] ]),",
-    "replace": "[ \"w\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteWordBefore();\n        recordKill(K1.slice(W1.offset, j1));\n        return W1;\n    } ], [ \"y\", () => killBufferRef.current ? O.insert(killBufferRef.current) : O ] ]),"
+    "replace": "[ \"w\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.prevWORD().modifyText(O);\n        recordKill(K1.slice(W1.offset, j1), W1.offset);\n        return W1;\n    } ], [ \"y\", () => killBufferRef.current ? O.insert(killBufferRef.current) : O ] ]),"
   },
   {
-    "label": "Meta+D kill ring",
+    "label": "Meta+D kill ring with append",
     "search": "[ \"d\", () => O.deleteWordAfter() ] ]);",
-    "replace": "[ \"d\", () => {\n        let K1 = O.text, j1 = O.offset, W1 = O.deleteWordAfter(), z1 = K1.length - W1.text.length;\n        if (z1 > 0) recordKill(K1.slice(j1, j1 + z1));\n        return W1;\n    } ] ]);"
+    "replace": "[ \"d\", () => {\n        let K1 = O.text, j1 = O.offset, endPos = O.endOfWord().right(), W1 = O.modifyText(endPos), z1 = endPos.offset - j1;\n        if (z1 > 0) recordKill(K1.slice(j1, j1 + z1), W1.offset);\n        return W1;\n    } ] ]);"
   }
 ]

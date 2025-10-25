@@ -1,13 +1,15 @@
 # Claude Yank Patcher
 
-This repo patches Anthropic's closed-source `@anthropic-ai/claude-code` CLI so it behaves like Emacs in the prompt: `Ctrl+W/K/U/Y` manipulate a kill ring and `Ctrl+Y` yanks the last kill. The tooling keeps every patched release in its own sandbox, making it easy to install, verify, and archive working replacements when Anthropic updates the CLI.
+This repo patches Anthropic's closed-source `@anthropic-ai/claude-code` CLI so it behaves like Emacs/readline in the prompt: `Ctrl+W/K/U/Y` manipulate a kill ring with consecutive kill appending, `Ctrl+Y` yanks, and `Ctrl+T` transposes characters. The tooling keeps every patched release in its own sandbox, making it easy to install, verify, and archive working replacements when Anthropic updates the CLI.
 
 ## Why it exists
 
 The stock CLI forgets text removed by the Emacs shortcuts. By injecting a tiny helper into the vendor prompt component we:
-- track the last killed text in a sandbox-local `killBufferRef`
-- write back the buffer on yank
-- keep per-version metadata so future installs reuse known-good replacements
+- Track killed text in a sandbox-local `killBufferRef` with consecutive kill appending
+- Support `^T` transpose characters
+- Fix word boundaries to match readline (`^W` uses whitespace, `Meta+D` preserves trailing space)
+- Write back the buffer on yank
+- Keep per-version metadata so future installs reuse known-good replacements
 
 ### Updating to new releases
 
@@ -59,11 +61,18 @@ After a successful patch the script mirrors those replacements into `patches/<ve
 - `claude` -- helper that launches a patched sandbox (`./claude 2.0.26`)
 - `tools/analysis/` -- one-off scripts for diffing and spelunking the vendor bundle
 
+## Features
+
+- **Kill ring**: `^K`, `^U`, `^W`, `Meta+D` kill text, `^Y` yanks it back
+- **Consecutive kill appending**: Repeated kills append (forward) or prepend (backward) to kill buffer
+- **Transpose**: `^T` swaps characters (special end-of-line behavior)
+- **Word boundaries**: `^W` uses whitespace boundaries, `Meta+D` preserves trailing space
+
 ## Maintenance checklist
 
 - Keep `patch-claude` and `apply_killring_patch.js` in sync with the latest prompt structure.
 - Commit the generated `patches/<version>/` folder whenever a new release is verified.
-- Use `./claude <version>` to sanity-check `Ctrl+W/K/U/Y` before archiving the patch.
+- Use `./claude <version>` to sanity-check features before archiving the patch.
 - Avoid committing the sandboxes themselves---`.gitignore` excludes them by default.
 
 Questions, bugs, or a new CLI shape? Update the replacements, rerun the installer, and capture the new patch state so the next upgrade is painless.
