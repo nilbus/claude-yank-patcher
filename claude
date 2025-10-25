@@ -1,11 +1,30 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 # Claude Code launcher for versioned sandboxes.
 # Run `./patch-claude --version X.Y.Z` to create a sandbox, then
 # launch it via `./claude --version X.Y.Z`. If no version is provided, the
 # newest sandbox under sandboxes/ is used automatically.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# fully cross platform and portable version to resolve symlinks - readlink is awesome but not portable. this is bash3+ compat in any environment that has bsd/gnu awk
+resolve_symlink() {
+    local SCRIPT=$1 NEWSCRIPT=''
+    until [[ "$SCRIPT" == "$NEWSCRIPT" ]]; do
+        # if path starts with '.' or '..', make it absolute
+        if [[ "${SCRIPT:0:1}" == '.' ]]; then
+            SCRIPT="$PWD/$SCRIPT"
+        fi
+        cd "$(dirname "$SCRIPT")" || return 1
+        if [[ "${SCRIPT:0:1}" != '.' ]]; then
+            SCRIPT="$(basename "$SCRIPT")"
+        fi
+        SCRIPT="${NEWSCRIPT:=$SCRIPT}"
+        NEWSCRIPT=$(ls -ld -- "$SCRIPT" 2>/dev/null | awk '{print $NF}')
+    done
+    if [[ "${SCRIPT:0:1}" != '/' ]]; then
+        SCRIPT="$PWD/$SCRIPT"
+    fi
+    dirname "$SCRIPT"
+}
+SCRIPT_DIR=$(resolve_symlink "$0")
 SANDBOX_ROOT="$SCRIPT_DIR/sandboxes"
 
 usage() {
