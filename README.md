@@ -1,15 +1,12 @@
 # Claude Yank Patcher
 
-This repo patches Anthropic's closed-source `@anthropic-ai/claude-code` CLI so it behaves like Emacs/readline in the prompt: `Ctrl+W/K/U/Y` manipulate a kill ring with consecutive kill appending, `Ctrl+Y` yanks, and `Ctrl+T` transposes characters. The tooling keeps every patched release in its own sandbox, making it easy to install, verify, and archive working replacements when Anthropic updates the CLI.
+Fixes **[Readline Yank Functionality Broken in Claude CLI #2088](https://github.com/anthropics/claude-code/issues/2088)** - restores Emacs-style keybindings (`Ctrl+W/K/U/Y`, `Ctrl+T`) to Anthropic's closed-source CLI.
 
-## Why it exists
-
-The stock CLI forgets text removed by the Emacs shortcuts. By injecting a tiny helper into the vendor prompt component we:
-- Track killed text in a sandbox-local `killBufferRef` with consecutive kill appending
-- Support `^T` transpose characters
-- Fix word boundaries to match readline (`^W` uses whitespace, `Meta+D` preserves trailing space)
-- Write back the buffer on yank
-- Keep per-version metadata so future installs reuse known-good replacements
+The official CLI cuts text but forgets it immediately, making `Ctrl+Y` (yank/paste) non-functional and causing data loss. This project injects a tiny helper that:
+- Restores `Ctrl+Y` yank functionality with proper kill ring behavior
+- Tracks killed text with consecutive kill appending
+- Fixes word boundaries and transpose characters
+- Maintains per-version patches for easy updates
 
 ### Updating to new releases
 
@@ -28,7 +25,7 @@ The stock CLI forgets text removed by the Emacs shortcuts. By injecting a tiny h
 # Install and patch a specific CLI version
 ./patch-claude 2.0.26
 
-# Launch the patched sandbox
+# Launch the patched sandbox for testing
 ./claude 2.0.26
 
 # Install whatever version npm reports as "latest"
