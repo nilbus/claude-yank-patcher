@@ -1,13 +1,13 @@
 [
   {
     "label": "killBufferRef insertion with offset tracking",
-    "search": "} = q7(), j = yy(",
-    "replace": "} = q7(), killBufferRef = OD.useRef(\"\"), lastKillEndOffsetRef = OD.useRef(-1), recordKill = (DA1, newOffset) => { if (!DA1 || DA1.length === 0) return; if (O.offset === lastKillEndOffsetRef.current) { if (newOffset < O.offset) { killBufferRef.current = DA1 + killBufferRef.current; } else { killBufferRef.current += DA1; } } else { killBufferRef.current = DA1; } lastKillEndOffsetRef.current = newOffset; }, j = yy("
+    "search": "} = O7(), P = jy(",
+    "replace": "} = O7(), killBufferRef = Jy1.useRef(\"\"), lastKillEndOffsetRef = Jy1.useRef(-1), recordKill = (DA1, newOffset) => { if (!DA1 || DA1.length === 0) return; if (O.offset === lastKillEndOffsetRef.current) { if (newOffset < O.offset) { killBufferRef.current = DA1 + killBufferRef.current; } else { killBufferRef.current += DA1; } } else { killBufferRef.current = DA1; } lastKillEndOffsetRef.current = newOffset; }, P = jy("
   },
   {
     "label": "recordKill in reset helper",
-    "search": "    function h() {\n        if (A.trim() !== \"\") q_(A), J?.();\n        return M5.fromText(\"\", V, 0);\n    }",
-    "replace": "    function h() {\n        if (A.trim() !== \"\") q_(A), J?.();\n        lastKillEndOffsetRef.current = -1;\n        return M5.fromText(\"\", V, 0);\n    }"
+    "search": "    function h() {\n        if (A.trim() !== \"\") w_(A), J?.();\n        return O5.fromText(\"\", V, 0);\n    }",
+    "replace": "    function h() {\n        if (A.trim() !== \"\") w_(A), J?.();\n        lastKillEndOffsetRef.current = -1;\n        return O5.fromText(\"\", V, 0);\n    }"
   },
   {
     "label": "Ctrl+K kill ring with append",
@@ -17,7 +17,7 @@
   {
     "label": "Ctrl+T transpose",
     "search": "[ \"p\", () => d() ], [ \"u\",",
-    "replace": "[ \"p\", () => d() ], [ \"t\", () => {\n        let text = O.text, offset = O.offset;\n        if (offset === 0 || text.length < 2) return O;\n        if (offset >= text.length) {\n            if (text.length < 2) return O;\n            let before = text.slice(0, offset - 2);\n            let char1 = text[offset - 2];\n            let char2 = text[offset - 1];\n            let after = text.slice(offset);\n            return M5.fromText(before + char2 + char1 + after, V, offset);\n        }\n        let before = text.slice(0, offset - 1);\n        let char1 = text[offset - 1];\n        let char2 = text[offset];\n        let after = text.slice(offset + 1);\n        return M5.fromText(before + char2 + char1 + after, V, offset + 1);\n    } ], [ \"u\","
+    "replace": "[ \"p\", () => d() ], [ \"t\", () => {\n        let text = O.text, offset = O.offset;\n        if (offset === 0 || text.length < 2) return O;\n        if (offset >= text.length) {\n            if (text.length < 2) return O;\n            let before = text.slice(0, offset - 2);\n            let char1 = text[offset - 2];\n            let char2 = text[offset - 1];\n            let after = text.slice(offset);\n            return O5.fromText(before + char2 + char1 + after, V, offset);\n        }\n        let before = text.slice(0, offset - 1);\n        let char1 = text[offset - 1];\n        let char2 = text[offset];\n        let after = text.slice(offset + 1);\n        return O5.fromText(before + char2 + char1 + after, V, offset + 1);\n    } ], [ \"u\","
   },
   {
     "label": "Ctrl+U kill ring with append",
